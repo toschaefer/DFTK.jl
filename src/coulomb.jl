@@ -39,7 +39,7 @@ Coulomb interaction: 1/r
 end
 eval_kernel_fourier(::Coulomb, Gsq::T) where {T} = 4T(π) / Gsq
 eval_probe_charge_integral(::Coulomb, α) = 8π^2 * sqrt(π / α)
-_compute_kernel_fourier(k::Coulomb, basis, qpt, q) = _compute_kernel_fourier(k, k.regularization, basis, qpt, q)
+_compute_kernel_fourier(k::Coulomb, basis, qpt) = _compute_kernel_fourier(k, k.regularization, basis, qpt)
 
 
 """
@@ -53,10 +53,10 @@ ShortRangeCoulomb(μ::Quantity) = ShortRangeCoulomb(austrip(μ))
 function eval_kernel_fourier(k::ShortRangeCoulomb, Gsq::T) where {T}
     -(4T(π) / Gsq) * expm1(-Gsq / (4 * T(k.μ)^2))
 end
-function _compute_kernel_fourier(k::ShortRangeCoulomb, basis, qpt, q)
+function _compute_kernel_fourier(k::ShortRangeCoulomb, basis, qpt)
     # Use ReplaceSingularity regularisation to explicitly set as the G==0
     # component the exact limit of the kernel for G->0, namely π/μ^2
-    _compute_kernel_fourier(k, ReplaceSingularity(π/k.μ^2), basis, qpt, q)
+    _compute_kernel_fourier(k, ReplaceSingularity(π/k.μ^2), basis, qpt)
 end
 
 
@@ -76,8 +76,8 @@ end
 function eval_probe_charge_integral(k::LongRangeCoulomb, α::T) where {T}
     8T(π)^2 * sqrt(T(π) / (α + 1/(4 * T(k.μ)^2)))
 end
-function _compute_kernel_fourier(k::LongRangeCoulomb, basis, qpt, q)
-    _compute_kernel_fourier(k, k.regularization, basis, qpt, q)
+function _compute_kernel_fourier(k::LongRangeCoulomb, basis, qpt)
+    _compute_kernel_fourier(k, k.regularization, basis, qpt)
 end
 
 #
@@ -98,7 +98,7 @@ end
 function eval_kernel_fourier(k::SphericallyTruncatedCoulomb, Gsq::T) where {T}
     4T(π) / Gsq * (1 - cos(T(k.Rcut) * sqrt(Gsq)))
 end
-function _compute_kernel_fourier(k::SphericallyTruncatedCoulomb, basis, qpt, q)
+function _compute_kernel_fourier(k::SphericallyTruncatedCoulomb, basis, qpt)
     # TODO: This is a bit hackish as the parameter needs to be re-computed every kernel
     #       evaluation. Cleaner would be to move this further up in the call hierarchy,
     #       such that compute_kernel_fourier is never called without Rcut being set to
@@ -109,7 +109,7 @@ function _compute_kernel_fourier(k::SphericallyTruncatedCoulomb, basis, qpt, q)
 
     # Use ReplaceSingularity regularisation to explicitly set as the G==0
     # component the exact limit of the kernel for G->0
-    _compute_kernel_fourier(kRcut, ReplaceSingularity(2π*Rcut^2), basis, qpt, q)
+    _compute_kernel_fourier(kRcut, ReplaceSingularity(2π*Rcut^2), basis, qpt)
 end
 @doc raw"""
 Returns the Fourier-space Coulomb kernel for momentum transfer `q`,
@@ -146,8 +146,7 @@ function compute_kernel_fourier(kernel::InteractionKernel, basis::PlaneWaveBasis
     #qpt = basis.kpoints[1] 
     #kernel_fourier =  _compute_kernel_fourier(kernel, basis, qpt, q)
     
-    q = qpt.coordinate
-    kernel_fourier =  _compute_kernel_fourier(kernel, basis, qpt, q)
+    kernel_fourier =  _compute_kernel_fourier(kernel, basis, qpt)
 
     # TODO: if q=0, symmetrize Fourier coeffs to have real iFFT 
 
@@ -177,7 +176,7 @@ charges, which can be computed using an Ewald sum.
     α::Union{Float64, Nothing} = nothing  # Width of the probe charge
 end
 @views function _compute_kernel_fourier(kernel, regularization::ProbeCharge,
-                                        basis::PlaneWaveBasis{T}, qpt, q) where {T}
+                                        basis::PlaneWaveBasis{T}, qpt) where {T}
     # Default value well-tested in VASP; ensures that e^(-α*G²) is localized
     # charge with full support on G grid
     α::T = @something regularization.α   π^2/basis.Ecut
@@ -218,7 +217,7 @@ struct ReplaceSingularity
     Gpq_zero_value::Float64
 end
 @views function _compute_kernel_fourier(kernel, regularization::ReplaceSingularity,
-                                        basis::PlaneWaveBasis{T}, qpt, q) where {T}
+                                        basis::PlaneWaveBasis{T}, qpt) where {T}
     # Compute truncated Coulomb kernel without special-casing singularity at G+q=0 
     kernel_fourier = map(Gplusk_vectors_cart(basis, qpt)) do Gpq
         eval_kernel_fourier(kernel, sum(abs2, Gpq))
