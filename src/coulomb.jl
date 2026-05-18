@@ -87,7 +87,7 @@ end
 
 """
 Spherically truncated Coulomb interaction: θ(Rcut-r)/r
-If Rcut is nothing, it uses `Rcut = cbrt(3Ω / (4π))` where `Ω` is the unit cell volume.
+If Rcut is nothing, it uses `Rcut = cbrt(3Ω / (4π))` where `Ω` is the Born-von Karman cell volume.
 
 ## References
 - [J. Spencer, A. Alavi. Phys. Rev. B **77**, 193110 (2008)](https://doi.org/10.1103/PhysRevB.77.193110)
@@ -103,7 +103,8 @@ function _compute_kernel_fourier(k::SphericallyTruncatedCoulomb, basis, qpt)
     #       evaluation. Cleaner would be to move this further up in the call hierarchy,
     #       such that compute_kernel_fourier is never called without Rcut being set to
     #       not nothing
-    Ω = basis.model.unit_cell_volume  
+    Nk = isnothing(basis.kgrid) ? 1 : length(basis.kgrid)
+    Ω = basis.model.unit_cell_volume * Nk  # Born-von Karman cell volume
     Rcut = @something k.Rcut cbrt(3Ω/(4π))
     kRcut = SphericallyTruncatedCoulomb(Rcut)
 
@@ -181,22 +182,34 @@ end
     # charge with full support on G grid
     α::T = @something regularization.α   π^2/basis.Ecut
 
-    Ω = basis.model.unit_cell_volume  # volume of unit cell 
-    Gpq = map(Gpq -> sum(abs2, Gpq), Gplusk_vectors_cart(basis, qpt))
-
-    # Note: q+G = 0 component is not special-cased, i.e. may be NaN or otherwise wrong
-    kernel_fourier = eval_kernel_fourier.(kernel, Gpq)
-
-    # Potential of Gaussian charges (skipping term at G+q=0)
-    probe_charge_sum = sum((kernel_fourier .* exp.(-α*Gpq))[2:end])
-
-    # Interaction of Gaussian charges with uniform background (i.e. integral of charges)
-    # = 1/Γ ∫_{BZ} kernel(q) e^(-αq²) dq, where the integral is computed by the
-    # eval_probe_charge_integral function.
-    Γ = basis.model.recip_cell_volume
-    probe_charge_integral = eval_probe_charge_integral(kernel, α) / Γ
+    kernel_fourier = map(G_vectors(basis)) do G
+        Gpq_cart = basis.model.recip_lattice * (G + qpt.coordinate)
+        eval_kernel_fourier(kernel, sum(abs2, Gpq_cart))
+    end
 
     if iszero(qpt.coordinate)
+        # Interaction of Gaussian charges with uniform background (i.e. integral of charges)
+        # = 1/Γ ∫_{BZ} kernel(q) e^(-αq²) dq, where the integral is computed by the
+        # eval_probe_charge_integral function.
+        Γ = basis.model.recip_cell_volume
+        Nk = isnothing(basis.kgrid) ? 1 : length(basis.kgrid)
+        probe_charge_integral = eval_probe_charge_integral(kernel, α) * Nk / Γ
+
+        # Potential of Gaussian charge
+        probe_charge_sum = sum(enumerate(basis.kpoints)) do (ik, kpt)
+            weight = basis.kweights[ik] / basis.model.n_spin_components * Nk
+            weight * sum(enumerate(G_vectors(basis))) do (iG, G)
+                Gpk_cart = basis.model.recip_lattice * (G + kpt.coordinate)
+                Gsq = sum(abs2, Gpk_cart)
+                if iG == 1 && iszero(kpt.coordinate)
+                    zero(T)
+                else
+                    eval_kernel_fourier(kernel, Gsq) * exp(-α * Gsq)
+                end
+            end
+        end
+        probe_charge_sum = mpi_sum(probe_charge_sum, basis.comm_kpts)
+
         GPUArraysCore.@allowscalar begin
             kernel_fourier[1] = probe_charge_integral - probe_charge_sum
         end
@@ -218,9 +231,10 @@ struct ReplaceSingularity
 end
 @views function _compute_kernel_fourier(kernel, regularization::ReplaceSingularity,
                                         basis::PlaneWaveBasis{T}, qpt) where {T}
-    # Compute truncated Coulomb kernel without special-casing singularity at G+q=0 
-    kernel_fourier = map(Gplusk_vectors_cart(basis, qpt)) do Gpq
-        eval_kernel_fourier(kernel, sum(abs2, Gpq))
+    # Compute Coulomb kernel without special-casing singularity at G+q=0 
+    kernel_fourier = map(G_vectors(basis)) do G
+        Gpq_cart = basis.model.recip_lattice * (G + qpt.coordinate)
+        eval_kernel_fourier(kernel, sum(abs2, Gpq_cart))
     end
     if iszero(qpt.coordinate)  # Neglect the singularity
         GPUArraysCore.@allowscalar kernel_fourier[1] = T(regularization.Gpq_zero_value)
