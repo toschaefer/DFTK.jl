@@ -8,7 +8,7 @@ and runs out of the box on Linux, Windows and macOS, see [Installation](@ref).
 - **LDA**, **GGA**, **meta-GGA** DFT functionals; any functional from the 
   [libxc](https://libxc.gitlab.io/) library is supported.
 - [Hubbard correction (DFT+U)](@ref).
-- [Exact exchange and Hybrid DFT](@ref) *(preliminary implementation)*
+- [Exact exchange and Hybrid DFT](@ref)
 - **Norm-conserving pseudopotentials**: Goedecker-type (GTH)
   or numerical (in UPF or PSP8 pseudopotential format),
   see [Pseudopotentials](@ref).
