@@ -45,8 +45,8 @@ _compute_kernel_fourier(k::Coulomb, basis, qpt) = _compute_kernel_fourier(k, k.r
 """
 Short-range Coulomb interaction via error function: erfc(μr)/r
 """
-struct ShortRangeCoulomb <: InteractionKernel 
-    μ::Float64  # Cutoff parameter in inverse length units
+struct ShortRangeCoulomb{T <: Real} <: InteractionKernel 
+    μ::T  # Cutoff parameter in inverse length units
 end
 ShortRangeCoulomb(; μ=0.2/u"Å") = ShortRangeCoulomb(austrip(μ))
 ShortRangeCoulomb(μ::Quantity) = ShortRangeCoulomb(austrip(μ))
@@ -63,8 +63,8 @@ end
 """
 Long-range Coulomb interaction via error function: erf(μr)/r
 """
-struct LongRangeCoulomb{R} <: InteractionKernel 
-    μ::Float64  # Cutoff parameter in inverse length units
+struct LongRangeCoulomb{T <: Real, R} <: InteractionKernel 
+    μ::T  # Cutoff parameter in inverse length units
     regularization::R
 end
 function LongRangeCoulomb(; μ=0.2/u"Å", regularization=ProbeCharge())
@@ -215,8 +215,8 @@ or for testing/comparison purposes.
 For Coulomb and the case of Gpq_zero_value=0 this leads to slow `O(1/L) = O(1 / ∛(Nk))`
 convergence where `L` is the size of the supercell,`Nk` is the number of k-points.
 """
-struct ReplaceSingularity
-    Gpq_zero_value::Float64
+struct ReplaceSingularity{T <: Real}
+    Gpq_zero_value::T
 end
 @views function _compute_kernel_fourier(kernel, regularization::ReplaceSingularity,
                                         basis::PlaneWaveBasis{T}, qpt) where {T}
