@@ -29,6 +29,8 @@ export mpi_master
 export setup_threading, disable_threading
 include("common/timer.jl")
 include("common/constants.jl")
+include("common/divided_difference.jl")
+include("common/matrix_function.jl")
 include("common/ortho.jl")
 include("common/types.jl")
 include("common/spherical_bessels.jl")
@@ -104,11 +106,11 @@ include("supercell.jl")
 export Energies
 include("Energies.jl")
 
-export Coulomb
+export BareCoulomb
 export SphericallyTruncatedCoulomb
 export WignerSeitzTruncatedCoulomb
 export ShortRangeCoulomb, LongRangeCoulomb
-export ProbeCharge, ReplaceSingularity, VoxelAveraged
+export ProbeCharge, ReplaceSingularity, VoxelAverage
 include("coulomb.jl")
 
 export Hamiltonian
